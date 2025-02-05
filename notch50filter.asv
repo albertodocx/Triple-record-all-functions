@@ -1,0 +1,87 @@
+
+function [] = notch50filter()
+
+%% 1. BATCH PROCESSING:
+
+uiwait(msgbox('Select main path (main folder)', 'Instructions', "modal")); 
+
+folderpath = uigetdir(); 
+
+
+% Get list of all subfolders.
+allSubFolders = genpath(folderpath);
+
+% Parse into a cell array.
+remain = allSubFolders;
+listOfFolderNames = {};
+while true
+	[singleSubFolder, remain] = strtok(remain, ';');
+	if isempty(singleSubFolder)
+		break;
+	end
+	listOfFolderNames = [listOfFolderNames singleSubFolder];
+end
+
+lfp_paths = [];
+for i = 1:length(listOfFolderNames)
+    if contains(listOfFolderNames(i), 'Data') && contains(listOfFolderNames(i), 'continuous')
+        lfp_paths = [lfp_paths listOfFolderNames(i)];
+    else
+        continue
+    end
+end
+
+
+%% 2. APPLY FILTER:
+
+for ii = 1:length(lfp_paths)
+    
+    % 2.1. Load file:
+
+    rawname = char(strcat(lfp_paths(ii),'\LFPraw.mat'));
+    resultsname = strcat(lfp_paths(ii), '\LFPdsdata.mat');
+    load(rawname);
+    load(resultsname);
+    
+    
+    % 2.2. Load variables:
+    
+    LFPdata = results_rawLFP.LFP;
+    fs = results_rawLFP.LFP.fs;
+
+
+    % CÓDIGO DE ALBERTO: Quitar ruido 50 Hz (notch filter)
+    wo = 50/(fs/2);   factor  = 100;
+    bw= wo/ factor;
+    [b, a] = iirnotch(wo, bw);
+    data_filt = filtfilt(b,a,LFPdata);
+    LFPdata = data_filt;
+
+    % 2.3. Downsample original data with notch filter in order to save in
+    % dsdata for further analysis:
+
+    ch = size(LFPdata, 1);
+   
+    lendata = zeros(1, size(LFPdata, 2));
+    fsdown = fs./1000;
+    newfs = 1000;
+    lendata = length(downsample(lendata, fsdown));
+    dsdata = zeros(ch, lendata);
+
+    for i = 1:ch
+        dsdata(i, :) = downsample(LFPdata(i, :), fsdown);
+    end
+
+    % 2.4. Save variables to LFPdsdata file:
+
+    results.LFPds.dsdata = dsdata;
+    results.LFPds.fs = newfs;
+    
+    % 2.5. Save file:
+
+    save(resultsname, 'results')
+
+end
+
+
+end
